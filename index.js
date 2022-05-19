@@ -10,6 +10,7 @@ const port = process.env.PORT || 5000;
 app.use(express.json());
 app.use(cors());
 
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const uri = `mongodb+srv://${process.env.USER_NAME}:${process.env.USER_PASS}@cluster0.rxhei.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
 
 const client = new MongoClient(uri, {
@@ -40,6 +41,7 @@ const run = async () => {
     const bookingCollection = await client.db("doctors-portal").collection("booking");
     const userCollection = await client.db("doctors-portal").collection("users");
     const doctorCollection = await client.db("doctors-portal").collection("doctors");
+    const paymentCollection = await client.db("doctors-portal").collection("payment");
 
     const verifyAdmin = async (req, res, next) => {
       const requester = req.decoded.email;
@@ -50,6 +52,17 @@ const run = async () => {
         res.status(403).send({ message: "Forbidden Access" });
       }
     };
+
+    //payment for api
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: price * 100,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({ clientSecret: paymentIntent.client_secret });
+    });
 
     app.get("/doctors", verifyJWT, verifyAdmin, async (req, res) => {
       const doctors = await doctorCollection.find().toArray();
@@ -128,6 +141,30 @@ const run = async () => {
       const cursor = servicesCollection.find(query).project({ name: 1 });
       const services = await cursor.toArray();
       res.send(services);
+    });
+
+    app.get("/booking/:id", verifyJWT, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const result = await bookingCollection.findOne(query);
+      res.send(result);
+    });
+
+    //update booking
+    app.patch("/booking/:id", verifyJWT, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: ObjectId(id) };
+      const payment = req.body.payment;
+      console.log(payment);
+      const updateDoc = {
+        $set: {
+          paid: true,
+          transactionId: payment.transactionId,
+        },
+      };
+      const updateBooking = await bookingCollection.updateOne(filter, updateDoc);
+      const result = await paymentCollection.insertOne(payment);
+      res.send(updateBooking);
     });
 
     app.get("/services", async (req, res) => {
