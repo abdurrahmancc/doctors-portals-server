@@ -55,6 +55,7 @@ const sendAppointmentEmail = (booking) => {
     <div>
       <p>Hello ${patientName}</p>
       <h3>your appointment for ${treatment} is confirmed</h3>
+      <h3>your appointment date ${date}</h3>
     </div>
     `,
   };
