@@ -5,6 +5,8 @@ const { json } = require("express/lib/response");
 const app = express();
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
+var nodemailer = require("nodemailer");
+var sgTransport = require("nodemailer-sendgrid-transport");
 const port = process.env.PORT || 5000;
 
 app.use(express.json());
@@ -31,6 +33,38 @@ const verifyJWT = (req, res, next) => {
     }
     req.decoded = decoded;
     next();
+  });
+};
+
+var emailSenderOptions = {
+  auth: {
+    api_key: process.env.EMAIL_SENDER_KEY,
+  },
+};
+
+const emailClient = nodemailer.createTransport(sgTransport(emailSenderOptions));
+const sendAppointmentEmail = (booking) => {
+  const { patientEmail, patientName, treatment, date, Slot } = booking;
+
+  const email = {
+    from: process.env.EMAIL_SENDER,
+    to: patientEmail,
+    subject: `your appointment for ${treatment} is on date ${date} at ${Slot} is confirmed`,
+    text: `your appointment for ${treatment} is on date ${date} at ${Slot} is confirmed`,
+    html: `
+    <div>
+      <p>Hello ${patientName}</p>
+      <h3>your appointment for ${treatment} is confirmed</h3>
+    </div>
+    `,
+  };
+
+  emailClient.sendMail(email, function (err, info) {
+    if (err) {
+      console.log(err);
+    } else {
+      console.log("Message sent: ", info);
+    }
   });
 };
 
@@ -186,6 +220,7 @@ const run = async () => {
         return res.send({ success: false, booking: exists });
       }
       const result = await bookingCollection.insertOne(booking);
+      sendAppointmentEmail(booking);
       res.send({ success: true, result });
     });
 
